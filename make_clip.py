@@ -30,7 +30,36 @@ def run(cmd, timeout=1500, tries=1):
     raise SystemExit(cmd[0] + " failed")
 
 
-UA = ["-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"]
+UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"
+UA = ["-user_agent", UA_STR]
+
+
+def resolve_drive(src):
+    """Drive sometimes answers with a 'can't scan for viruses' page instead of the video.
+    Read that page and build the real download link (same trick gdown uses)."""
+    import html, re
+    for attempt in range(5):
+        req = urllib.request.Request(src, headers={"User-Agent": UA_STR, "Range": "bytes=0-2047"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                ctype = r.headers.get("Content-Type", "")
+                body = r.read()
+        except Exception as e:
+            print("drive check error:", e, flush=True)
+            time.sleep(45)
+            continue
+        if not ctype.startswith("text/html"):
+            return src
+        page = body.decode("utf-8", "ignore")
+        title = re.search(r"<title>(.*?)</title>", page, re.S)
+        print("drive answered a page:", title.group(1).strip() if title else page[:200], flush=True)
+        fields = dict(re.findall(r'name="([^"]+)" value="([^"]*)"', page))
+        if "id" in fields and "uuid" in fields:
+            src = "https://drive.usercontent.google.com/download?" + "&".join(
+                "%s=%s" % (k, urllib.parse.quote(html.unescape(v))) for k, v in fields.items())
+            continue  # check the new link too
+        time.sleep(45)
+    return src
 
 
 def http_json(url, data=None):
@@ -103,6 +132,7 @@ def main():
     if youtube:
         total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
     else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
+        src = resolve_drive(src)
         total = float(run(["ffprobe", "-v", "error"] + UA + ["-show_entries", "format=duration", "-of", "csv=p=0", src], 300, tries=5).strip())
     start = part * seg
     if start >= total - 15:  # under 15 s left (already glued onto the previous part)
