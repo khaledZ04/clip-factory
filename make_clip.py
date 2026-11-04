@@ -42,17 +42,23 @@ def drive_relay(src):
     answers fixed-size slices. This local relay turns ffmpeg's requests into 8 MB slices."""
     import http.server, re, threading
 
+    file_id = urllib.parse.parse_qs(urllib.parse.urlparse(src).query).get("id", [""])[0]
+    mirrors = [src, "https://drive.google.com/uc?export=download&confirm=t&id=" + file_id] if file_id else [src]
+
     def fetch(a, b):
-        for attempt in range(6):
+        # Drive refuses some slices for a while; keep trying (about 10 minutes) on both Drive hosts
+        for attempt in range(24):
+            url = mirrors[attempt % len(mirrors)]
             try:
-                req = urllib.request.Request(src, headers={"User-Agent": UA_STR, "Range": "bytes=%d-%d" % (a, b)})
+                req = urllib.request.Request(url, headers={"User-Agent": UA_STR, "Range": "bytes=%d-%d" % (a, b)})
                 with urllib.request.urlopen(req, timeout=120) as r:
-                    if r.status == 206:
-                        return r.read(), r.headers.get("Content-Range", "")
+                    data = r.read()
+                    if r.status == 206 and len(data) == b - a + 1:
+                        return data, r.headers.get("Content-Range", "")
                     raise IOError("Drive answered %s %s" % (r.status, r.headers.get("Content-Type")))
             except Exception as e:
-                print("slice %d-%d failed (%s), retrying" % (a, b, e), flush=True)
-                time.sleep(5 * (attempt + 1))
+                print("slice %d-%d refused (%s), retry %d" % (a, b, str(e)[:60], attempt + 1), flush=True)
+                time.sleep(min(60, 5 + attempt * 5))
         raise IOError("Drive kept refusing")
 
     total = int(fetch(0, 1023)[1].split("/")[-1])
@@ -159,7 +165,7 @@ def build_ass(title, words, video_h, length):
         # red badge with white text
         "Style: Badge,Noto Sans Arabic,50,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,3,14,0,8,40,40,0,1" % (WHITE, WHITE, RED),
         # big white captions, thick black outline, soft shadow
-        "Style: Cap,Noto Sans Arabic,76,%s,%s,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,7,4,8,50,50,0,1" % (WHITE, WHITE),
+        "Style: Cap,Noto Sans Arabic,84,%s,%s,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,7,4,8,50,50,0,1" % (WHITE, WHITE),
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     if title:
@@ -239,6 +245,9 @@ def main():
         with urllib.request.urlopen(req, timeout=120) as r, open(wm, "wb") as f:
             f.write(r.read())
 
+    got = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", raw]).strip() or 0)
+    if got < length - 2:  # never post a cut-short clip; the same part is tried again next run
+        raise SystemExit("clip came out %.1fs instead of %.1fs (Drive refused part of it)" % (got, length))
     probe = json.loads(run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "json", raw]))
     sw, sh = probe["streams"][0]["width"], probe["streams"][0]["height"]
     vh = min(1920, int(round(1080 * sh / sw / 2)) * 2)
@@ -284,6 +293,51 @@ def main():
     print("result:", json.dumps(result, ensure_ascii=False), flush=True)
     if not DRY:
         http_json(READY_URL, result)
+        submit_when_posted(job["ep"], part, job.get("title", ""))
+
+
+def notify(title, text, click=""):
+    topic = os.environ.get("NTFY_TOPIC")
+    if not topic:
+        return
+    headers = {"Title": title.encode("utf-8").decode("latin-1", "ignore") or "clip", "Priority": "high"}
+    if click:
+        headers["Click"] = click
+    try:
+        urllib.request.urlopen(urllib.request.Request("https://ntfy.sh/" + topic, data=text.encode("utf-8"), headers=headers), timeout=30)
+    except Exception as e:
+        print("ntfy failed:", e)
+
+
+def submit_when_posted(ep, part, title):
+    """Waits for n8n to finish posting (up to 25 min), then submits both links on Content Rewards."""
+    if not os.environ.get("CR_SESSION"):
+        print("no CR_SESSION secret yet - skipping auto-submit")
+        return
+    links_url = READY_URL.replace("clip-ready", "clip-links") + "?key=%s-%s" % (ep, part)
+    links = {}
+    for _ in range(50):
+        try:
+            links = http_json(links_url)
+        except Exception as e:
+            print("links not ready:", e)
+        if links.get("tiktokUrl") or links.get("instagramUrl"):
+            break
+        time.sleep(30)
+    urls = [u for u in (links.get("tiktokUrl"), links.get("instagramUrl")) if u]
+    if not urls:
+        notify("Clip posted? no links after 25 min", title)
+        return
+    p = subprocess.run([sys.executable, "submit.py"] + urls, capture_output=True, text=True, timeout=900)
+    print(p.stdout[-3000:], p.stderr[-3000:], flush=True)
+    if "LOGIN_EXPIRED" in p.stdout + p.stderr:
+        notify("Content Rewards sign-in expired - submit by hand", "Run save-login.js again.\n" + "\n".join(urls),
+               "https://contentrewards.com/c/campaigns/e73e9e9c-fba4-4c8b-9c0e-6fb1e607c2a5")
+    elif p.returncode == 0:
+        notify("Submitted to Content Rewards", title + "\n" + "\n".join(urls), urls[0])
+    else:
+        notify("Auto-submit failed - submit by hand within 30 min", title + "\n" + "\n".join(urls),
+               "https://contentrewards.com/c/campaigns/e73e9e9c-fba4-4c8b-9c0e-6fb1e607c2a5")
 
 
 if __name__ == "__main__":

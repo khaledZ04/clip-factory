@@ -36,6 +36,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-noto-core > /dev/null
           pip install -q -U -r requirements.txt
+          python -m playwright install --with-deps chromium > /dev/null
       - uses: actions/cache@v4
         with:
           path: ~/.cache/whisper
@@ -55,11 +56,15 @@ jobs:
           N8N_NEXT_URL: ${{ secrets.N8N_NEXT_URL }}
           N8N_READY_URL: ${{ secrets.N8N_READY_URL }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          CR_SESSION: ${{ secrets.CR_SESSION }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: python make_clip.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: clip
-          path: work/*.mp4
+          path: |
+            work/*.mp4
+            work/*.png
           retention-days: 3
