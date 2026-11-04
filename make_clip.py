@@ -17,13 +17,20 @@ WORK = "work"
 os.makedirs(WORK, exist_ok=True)
 
 
-def run(cmd, timeout=1500):
-    print("+", " ".join(cmd[:6]), flush=True)
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if p.returncode != 0:
+def run(cmd, timeout=1500, tries=1):
+    for attempt in range(tries):
+        print("+", " ".join(cmd[:6]), flush=True)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if p.returncode == 0:
+            return p.stdout
         print(p.stderr[-3000:], flush=True)
-        raise SystemExit(cmd[0] + " failed")
-    return p.stdout
+        if attempt < tries - 1:
+            print("retrying in 45s (Drive sometimes refuses for a moment)", flush=True)
+            time.sleep(45)
+    raise SystemExit(cmd[0] + " failed")
+
+
+UA = ["-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130 Safari/537.36"]
 
 
 def http_json(url, data=None):
@@ -96,7 +103,7 @@ def main():
     if youtube:
         total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
     else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
-        total = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src], 300).strip())
+        total = float(run(["ffprobe", "-v", "error"] + UA + ["-show_entries", "format=duration", "-of", "csv=p=0", src], 300, tries=5).strip())
     start = part * seg
     if start >= total - 15:  # under 15 s left (already glued onto the previous part)
         if not DRY:
@@ -112,8 +119,8 @@ def main():
                        "--download-sections", "*%.2f-%.2f" % (start, start + length),
                        "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", raw, src])
     else:
-        run(["ffmpeg", "-y", "-ss", "%.2f" % start, "-i", src, "-t", "%.2f" % length, "-map", "0:v:0", "-map", "0:a:0?",
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-c:a", "aac", "-b:a", "192k", raw])
+        run(["ffmpeg", "-y"] + UA + ["-ss", "%.2f" % start, "-i", src, "-t", "%.2f" % length, "-map", "0:v:0", "-map", "0:a:0?",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-c:a", "aac", "-b:a", "192k", raw], tries=3)
 
     wm = os.path.join(WORK, "watermark")
     if job.get("watermark_url"):
