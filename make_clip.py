@@ -79,9 +79,9 @@ def build_ass(title, words, video_h, length):
 
 def main():
     if DRY:
-        job = {"ep": 0, "part": 3, "part_seconds": 60,
+        job = {"ep": 0, "part": 2, "part_seconds": 60,
                "source": "https://drive.usercontent.google.com/download?id=1xZeg96A4BnfULVC9KRWVPcjOyXJyDfL3&export=download&confirm=t",
-               "title": "المستثمر الإماراتي | مقابلات - الجزء 4",
+               "title": "المستثمر الإماراتي | مقابلات - الجزء 3",
                "watermark_url": "https://drive.usercontent.google.com/download?id=1E36oS56HOOo9f1Xb-aSUdQhCisjLb67v&export=download&confirm=t",
                "captions": True}
     else:
@@ -98,7 +98,7 @@ def main():
     else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
         total = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src], 300).strip())
     start = part * seg
-    if start >= total - 1:
+    if start >= total - 15:  # under 15 s left (already glued onto the previous part)
         if not DRY:
             http_json(READY_URL, {"done": True, "ep": job["ep"], "part": part})
         print("episode finished")
