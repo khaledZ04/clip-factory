@@ -79,8 +79,9 @@ def build_ass(title, words, video_h, length):
 
 def main():
     if DRY:
-        job = {"ep": 0, "part": 0, "source": "https://youtu.be/B3fAcXzn6OE", "part_seconds": 60,
-               "title": "بودكاست أصولي | الحلقة 1 - الجزء 1",
+        job = {"ep": 0, "part": 3, "part_seconds": 60,
+               "source": "https://drive.usercontent.google.com/download?id=1xZeg96A4BnfULVC9KRWVPcjOyXJyDfL3&export=download&confirm=t",
+               "title": "المستثمر الإماراتي | مقابلات - الجزء 4",
                "watermark_url": "https://drive.usercontent.google.com/download?id=1E36oS56HOOo9f1Xb-aSUdQhCisjLb67v&export=download&confirm=t",
                "captions": True}
     else:
@@ -91,7 +92,11 @@ def main():
         return
 
     src, part, seg = job["source"], int(job["part"]), float(job.get("part_seconds", 60))
-    total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
+    youtube = "youtu" in src
+    if youtube:
+        total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
+    else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
+        total = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src], 300).strip())
     start = part * seg
     if start >= total - 1:
         if not DRY:
@@ -102,9 +107,13 @@ def main():
     is_last = start + length >= total - 1
 
     raw = os.path.join(WORK, "raw.mp4")
-    run(ytdlp() + ["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b",
-                   "--download-sections", "*%.2f-%.2f" % (start, start + length),
-                   "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", raw, src])
+    if youtube:
+        run(ytdlp() + ["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b",
+                       "--download-sections", "*%.2f-%.2f" % (start, start + length),
+                       "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", raw, src])
+    else:
+        run(["ffmpeg", "-y", "-ss", "%.2f" % start, "-i", src, "-t", "%.2f" % length, "-map", "0:v:0", "-map", "0:a:0?",
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-c:a", "aac", "-b:a", "192k", raw])
 
     wm = os.path.join(WORK, "watermark")
     if job.get("watermark_url"):
