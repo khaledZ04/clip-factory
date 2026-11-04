@@ -161,11 +161,11 @@ def build_ass(title, words, video_h, length):
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
         # gold box with dark text (BorderStyle 3 = box in OutlineColour)
-        "Style: Title,Noto Sans Arabic,58,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,3,18,0,8,40,40,0,1" % (DARK, DARK, GOLD),
+        "Style: Title,Tajawal ExtraBold,62,%s,%s,%s,&H00000000,0,0,0,0,100,100,0,0,3,18,0,8,40,40,0,1" % (DARK, DARK, GOLD),
         # red badge with white text
-        "Style: Badge,Noto Sans Arabic,50,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,3,14,0,8,40,40,0,1" % (WHITE, WHITE, RED),
+        "Style: Badge,Tajawal ExtraBold,52,%s,%s,%s,&H00000000,0,0,0,0,100,100,0,0,3,14,0,8,40,40,0,1" % (WHITE, WHITE, RED),
         # big white captions, thick black outline, soft shadow
-        "Style: Cap,Noto Sans Arabic,84,%s,%s,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,7,4,8,50,50,0,1" % (WHITE, WHITE),
+        "Style: Cap,Almarai ExtraBold,96,%s,%s,&H00000000,&H90000000,0,0,0,0,100,100,0,0,1,8,4,8,40,40,0,1" % (WHITE, WHITE),
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     if title:
@@ -179,7 +179,7 @@ def build_ass(title, words, video_h, length):
     # captions: up to 4 words per line, the word being spoken turns yellow and pops a little
     groups, group = [], []
     for w in words:
-        if group and (len(group) >= 4 or w["start"] - group[-1]["end"] > 0.8 or w["end"] - group[0]["start"] > 2.6):
+        if group and (len(group) >= 3 or w["start"] - group[-1]["end"] > 0.8 or w["end"] - group[0]["start"] > 2.2):
             groups.append(group)
             group = []
         group.append(w)
@@ -193,9 +193,13 @@ def build_ass(title, words, video_h, length):
             e = g[i + 1]["start"] if i + 1 < len(g) else line_end
             if e <= s:
                 continue
-            text = " ".join(
-                ("{\\c%s\\fscx112\\fscy112}%s{\\c%s\\fscx100\\fscy100}" % (YELLOW, clean(x["word"]), WHITE)) if j == i else clean(x["word"])
-                for j, x in enumerate(g))
+            # The renderer lays out each styled piece left-to-right, so pieces go in visual order:
+            # words after the spoken one (left), the spoken word, words before it (right) -> reads right-to-left.
+            before = " ".join(clean(x["word"]) for x in g[:i])
+            after = " ".join(clean(x["word"]) for x in g[i + 1:])
+            # spoken word: dark text on a big yellow highlight (thick yellow outline acts as the box)
+            active = "{\\c%s\\3c%s\\bord15\\shad0\\fscx112\\fscy112}%s{\\r}" % (DARK, YELLOW, clean(w["word"]))
+            text = "  ".join(p for p in (after, active, before) if p)  # wide gaps so the highlight never covers a neighbour
             out.append("Dialogue: 0,%s,%s,Cap,,0,0,0,,%s%s" % (ass_time(s), ass_time(e), pos, text))
     return "\n".join(out) + "\n"
 
