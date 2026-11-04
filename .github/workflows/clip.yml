@@ -35,7 +35,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-noto-core > /dev/null
-          pip install -q -U "yt-dlp[default]" faster-whisper
+          pip install -q -U -r requirements.txt
       - uses: actions/cache@v4
         with:
           path: ~/.cache/whisper
