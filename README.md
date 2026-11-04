@@ -1,6 +1,6 @@
 # clip-factory
 
-Makes the next 1-minute part for the n8n workflow **مصنع الكليبينق** twice a day (4 PM and 9 PM Riyadh).
+Makes the next 1-minute part for the n8n workflow **مصنع الكليبينق** 10 times a day (10 AM to 10 PM Riyadh).
 No AI picks or edits anything: each episode is cut into consecutive 1-minute parts, with the watermark,
 a small title on top and Arabic captions.
 

@@ -2,8 +2,8 @@ name: Make next clip
 
 on:
   schedule:
-    - cron: "0 13 * * *"   # 4 PM Riyadh
-    - cron: "0 18 * * *"   # 9 PM Riyadh
+    # 10 clips a day (Riyadh): 10am, 12pm, 2pm, 4pm, 5pm, 6pm, 7pm, 8pm, 9pm, 10pm
+    - cron: "0 7,9,11,13,14,15,16,17,18,19 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.cache/whisper
-          key: whisper-small-v1
+          key: whisper-large-v3-turbo-v1
       - name: Old clips cleanup (older than 7 days)
         env:
           GH_TOKEN: ${{ github.token }}

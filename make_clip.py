@@ -143,26 +143,54 @@ def clean(text):
     return text.replace("{", "").replace("}", "").replace("\n", " ").strip()
 
 
+# colours are &HBBGGRR (ASS order)
+GOLD, RED, YELLOW, WHITE, DARK = "&H0000C3FF", "&H004639E6", "&H0000E6FF", "&H00FFFFFF", "&H00141414"
+
+
 def build_ass(title, words, video_h, length):
     top = (1920 - video_h) // 2
+    bottom = top + video_h
     out = [
         "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920", "WrapStyle: 0", "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Title,Noto Sans Arabic,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,3,0,8,60,60,%d,1" % max(40, top - 150),
-        "Style: Cap,Noto Sans Arabic,64,&H00FFFFFF,&H0000D4FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,0,2,60,60,%d,1" % max(120, top - 220),
+        # gold box with dark text (BorderStyle 3 = box in OutlineColour)
+        "Style: Title,Noto Sans Arabic,58,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,3,18,0,8,40,40,0,1" % (DARK, DARK, GOLD),
+        # red badge with white text
+        "Style: Badge,Noto Sans Arabic,50,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,3,14,0,8,40,40,0,1" % (WHITE, WHITE, RED),
+        # big white captions, thick black outline, soft shadow
+        "Style: Cap,Noto Sans Arabic,76,%s,%s,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,7,4,8,50,50,0,1" % (WHITE, WHITE),
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     if title:
-        out.append("Dialogue: 0,%s,%s,Title,,0,0,0,,%s" % (ass_time(0), ass_time(length), clean(title)))
-    group = []
-    for w in words + [None]:
-        if w is not None:
-            group.append(w)
-        if group and (w is None or len(group) >= 5 or group[-1]["end"] - group[0]["start"] > 2.5):
-            out.append("Dialogue: 0,%s,%s,Cap,,0,0,0,,%s" % (
-                ass_time(group[0]["start"]), ass_time(group[-1]["end"] + 0.1), " ".join(clean(g["word"]) for g in group)))
+        name, _, badge = title.rpartition(" - ")
+        if not name:
+            name, badge = title, ""
+        out.append("Dialogue: 1,%s,%s,Title,,0,0,0,,{\\an8\\pos(540,%d)\\fad(300,0)}%s" % (ass_time(0), ass_time(length), max(30, top - 230), clean(name)))
+        if badge:
+            out.append("Dialogue: 1,%s,%s,Badge,,0,0,0,,{\\an8\\pos(540,%d)\\fad(300,0)}%s" % (ass_time(0), ass_time(length), max(120, top - 120), clean(badge)))
+
+    # captions: up to 4 words per line, the word being spoken turns yellow and pops a little
+    groups, group = [], []
+    for w in words:
+        if group and (len(group) >= 4 or w["start"] - group[-1]["end"] > 0.8 or w["end"] - group[0]["start"] > 2.6):
+            groups.append(group)
             group = []
+        group.append(w)
+    if group:
+        groups.append(group)
+    pos = "{\\an8\\pos(540,%d)}" % min(1700, bottom + 70)
+    for gi, g in enumerate(groups):
+        line_end = min(g[-1]["end"] + 0.25, groups[gi + 1][0]["start"] if gi + 1 < len(groups) else length)
+        for i, w in enumerate(g):
+            s = g[0]["start"] if i == 0 else w["start"]
+            e = g[i + 1]["start"] if i + 1 < len(g) else line_end
+            if e <= s:
+                continue
+            text = " ".join(
+                ("{\\c%s\\fscx112\\fscy112}%s{\\c%s\\fscx100\\fscy100}" % (YELLOW, clean(x["word"]), WHITE)) if j == i else clean(x["word"])
+                for j, x in enumerate(g))
+            out.append("Dialogue: 0,%s,%s,Cap,,0,0,0,,%s%s" % (ass_time(s), ass_time(e), pos, text))
     return "\n".join(out) + "\n"
 
 
@@ -218,8 +246,12 @@ def main():
     words = []
     if job.get("captions", True):
         from faster_whisper import WhisperModel
-        model = WhisperModel("small", device="cpu", compute_type="int8", download_root=os.path.expanduser("~/.cache/whisper"))
-        segments, _ = model.transcribe(raw, language="ar", word_timestamps=True, vad_filter=True)
+        model = WhisperModel(os.environ.get("WHISPER_MODEL", "large-v3-turbo"), device="cpu", compute_type="int8",
+                             cpu_threads=os.cpu_count() or 4, download_root=os.path.expanduser("~/.cache/whisper"))
+        segments, _ = model.transcribe(
+            raw, language="ar", word_timestamps=True, vad_filter=True, beam_size=5,
+            condition_on_previous_text=False,
+            initial_prompt="حلقة بودكاست باللهجة الخليجية مع المستثمر الإماراتي علي الحامد، بودكاست أصولي، الاستثمار والتجارة وريادة الأعمال.")
         for s in segments:
             for w in s.words or []:
                 if w.word.strip():
@@ -230,7 +262,10 @@ def main():
 
     name = "ep%02d-part%03d-%s.mp4" % (int(job["ep"]) + 1, part + 1, uuid.uuid4().hex[:6])
     out = os.path.join(WORK, name)
-    fc = "[0:v]scale=1080:%d,setsar=1[vid];color=c=black:s=1080x1920:r=30[bg];[bg][vid]overlay=0:(H-h)/2:shortest=1[base]" % vh
+    # background = the same video, zoomed, blurred and darkened; sharp video in the middle
+    fc = ("[0:v]split[a][b];"
+          "[a]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=30,eq=brightness=-0.18:saturation=1.2,setsar=1[bg];"
+          "[b]scale=1080:%d,setsar=1[vid];[bg][vid]overlay=0:(H-h)/2,fps=30[base]") % vh
     inputs = ["-i", raw]
     last = "base"
     if os.path.exists(wm):
