@@ -34,6 +34,59 @@ UA_STR = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/13
 UA = ["-user_agent", UA_STR]
 
 
+CHUNK = 8 * 1024 * 1024
+
+
+def drive_relay(src):
+    """Drive refuses open-ended downloads of busy shared files ("Quota exceeded") but still
+    answers fixed-size slices. This local relay turns ffmpeg's requests into 8 MB slices."""
+    import http.server, re, threading
+
+    def fetch(a, b):
+        for attempt in range(6):
+            try:
+                req = urllib.request.Request(src, headers={"User-Agent": UA_STR, "Range": "bytes=%d-%d" % (a, b)})
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    if r.status == 206:
+                        return r.read(), r.headers.get("Content-Range", "")
+                    raise IOError("Drive answered %s %s" % (r.status, r.headers.get("Content-Type")))
+            except Exception as e:
+                print("slice %d-%d failed (%s), retrying" % (a, b, e), flush=True)
+                time.sleep(5 * (attempt + 1))
+        raise IOError("Drive kept refusing")
+
+    total = int(fetch(0, 1023)[1].split("/")[-1])
+
+    class Relay(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            m = re.match(r"bytes=(\d*)-(\d*)", self.headers.get("Range", "bytes=0-"))
+            a = int(m.group(1) or 0)
+            b = int(m.group(2)) if m.group(2) else total - 1
+            self.send_response(206)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Range", "bytes %d-%d/%d" % (a, b, total))
+            self.send_header("Content-Length", str(b - a + 1))
+            self.end_headers()
+            try:
+                pos = a
+                while pos <= b:
+                    end = min(b, pos + CHUNK - 1)
+                    self.wfile.write(fetch(pos, end)[0])
+                    pos = end + 1
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # ffmpeg jumped elsewhere
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Relay)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return "http://127.0.0.1:%d/video.mp4" % srv.server_address[1]
+
+
 def resolve_drive(src):
     """Drive sometimes answers with a 'can't scan for viruses' page instead of the video.
     Read that page and build the real download link (same trick gdown uses)."""
@@ -132,7 +185,7 @@ def main():
     if youtube:
         total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
     else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
-        src = resolve_drive(src)
+        src = drive_relay(src)
         total = float(run(["ffprobe", "-v", "error"] + UA + ["-show_entries", "format=duration", "-of", "csv=p=0", src], 300, tries=5).strip())
     start = part * seg
     if start >= total - 15:  # under 15 s left (already glued onto the previous part)
