@@ -47,11 +47,17 @@ jobs:
           for f in almarai/Almarai-ExtraBold.ttf tajawal/Tajawal-ExtraBold.ttf; do curl -sSfL -o ~/.local/share/fonts/$(basename $f) https://raw.githubusercontent.com/google/fonts/main/ofl/$f; done
           fc-cache -f > /dev/null && fc-list | grep -E "Almarai|Tajawal"
           pip install -q -U -r requirements.txt
-          python -m playwright install --with-deps chromium > /dev/null
       - uses: actions/cache@v4
         with:
           path: ~/.cache/whisper
           key: whisper-large-v3-turbo-v1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1
+      - name: Submit-bot browser
+        if: ${{ !inputs.dry_run }}
+        run: python -m playwright install chromium-headless-shell > /dev/null
       - name: Old clips cleanup (older than 7 days)
         env:
           GH_TOKEN: ${{ github.token }}
