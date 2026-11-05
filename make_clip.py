@@ -6,7 +6,7 @@
 3. Uploads the MP4 to this repo's "clips" release and sends the link to n8n (N8N_READY_URL).
 Set DRY_RUN=1 to make Part 1 of episode 1 without talking to n8n.
 """
-import json, os, subprocess, sys, time, urllib.request, uuid
+import json, os, subprocess, sys, time, urllib.parse, urllib.request, uuid
 
 NEXT_URL = os.environ.get("N8N_NEXT_URL", "")
 READY_URL = os.environ.get("N8N_READY_URL", "")
@@ -128,6 +128,35 @@ def http_json(url, data=None):
     with urllib.request.urlopen(req, timeout=120) as r:
         body = r.read().decode() or "{}"
     return json.loads(body)
+
+
+def tiktok_upload(path, title):
+    """Asks n8n for a one-time TikTok upload link and sends the file straight to TikTok.
+    (n8n is too small to hold the video in memory.) Returns the publish_id, or None to skip TikTok."""
+    try:
+        size = os.path.getsize(path)
+        base = NEXT_URL.split("?")[0].replace("clip-next-", "tiktok-upload-")
+        info = http_json(base + "?" + urllib.parse.urlencode({"size": size, "title": title}))
+        if not info.get("upload_url"):
+            print("tiktok: skipped -", info.get("reason", info), flush=True)
+            return None
+        chunk, count = int(info["chunk_size"]), int(info["chunk_count"])
+        with open(path, "rb") as f:
+            for i in range(count):
+                start = i * chunk
+                end = size - 1 if i == count - 1 else start + chunk - 1
+                f.seek(start)
+                data = f.read(end - start + 1)
+                req = urllib.request.Request(info["upload_url"], data=data, method="PUT", headers={
+                    "Content-Type": "video/mp4", "Content-Length": str(len(data)),
+                    "Content-Range": "bytes %d-%d/%d" % (start, end, size)})
+                with urllib.request.urlopen(req, timeout=600) as r:
+                    r.read()
+        print("tiktok: uploaded %d bytes in %d chunk(s)" % (size, count), flush=True)
+        return info["publish_id"]
+    except Exception as e:
+        print("tiktok: upload failed -", str(e)[:300], flush=True)
+        return None
 
 
 def ytdlp():
@@ -309,6 +338,7 @@ def main():
               "length": length, "source_duration": total, "caption_words": len(words)}
     print("result:", json.dumps(result, ensure_ascii=False), flush=True)
     if not DRY:
+        result["tiktok_publish_id"] = tiktok_upload(out, job.get("title", ""))
         http_json(READY_URL, result)
         submit_when_posted(job["ep"], part, job.get("title", ""))
 
