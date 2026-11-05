@@ -248,9 +248,19 @@ def main():
 
     wm = os.path.join(WORK, "watermark")
     if job.get("watermark_url"):
-        req = urllib.request.Request(job["watermark_url"], headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=120) as r, open(wm, "wb") as f:
-            f.write(r.read())
+        data = b""
+        try:
+            req = urllib.request.Request(job["watermark_url"], headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                data = r.read()
+        except Exception as e:
+            print("watermark download failed:", e, flush=True)
+        if not data.startswith(b"\x89PNG") and not data.startswith(b"\xff\xd8"):
+            # Drive sometimes sends an HTML page instead of the image; use the copy kept in the repo
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "watermark.png"), "rb") as f:
+                data = f.read()
+        with open(wm, "wb") as f:
+            f.write(data)
 
     got = float(run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", raw]).strip() or 0)
     if got < length - 2:  # never post a cut-short clip; the same part is tried again next run
