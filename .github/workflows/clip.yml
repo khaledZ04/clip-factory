@@ -10,6 +10,10 @@ on:
         description: "Test only: make Part 1 of episode 1, don't send to n8n"
         type: boolean
         default: false
+      check_submit:
+        description: "Test only: open the Content Rewards form and fill it, but do NOT submit"
+        type: boolean
+        default: false
       test_file:
         description: "Test only: Google Drive file id to cut"
         type: string
@@ -70,7 +74,14 @@ jobs:
           gh api repos/${{ github.repository }}/releases/tags/clips --jq '.assets[] | "\(.id) \(.created_at)"' | while read id created; do
             [ "$(date -d "$created" +%s)" -lt "$cutoff" ] && gh api -X DELETE repos/${{ github.repository }}/releases/assets/$id || true
           done
+      - name: Submit bot check (fills the form, does not submit)
+        if: ${{ inputs.check_submit }}
+        env:
+          CR_SESSION: ${{ secrets.CR_SESSION }}
+          CHECK_ONLY: "1"
+        run: python submit.py https://www.tiktok.com/@jancostudios/video/7400000000000000000
       - name: Make clip
+        if: ${{ !inputs.check_submit }}
         env:
           GH_TOKEN: ${{ github.token }}
           N8N_NEXT_URL: ${{ secrets.N8N_NEXT_URL }}

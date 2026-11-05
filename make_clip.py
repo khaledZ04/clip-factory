@@ -215,7 +215,7 @@ def main():
                "watermark_url": "https://drive.usercontent.google.com/download?id=1E36oS56HOOo9f1Xb-aSUdQhCisjLb67v&export=download&confirm=t",
                "captions": True}
     else:
-        job = http_json(NEXT_URL)
+        job = http_json(NEXT_URL + "?trigger=" + os.environ.get("GITHUB_EVENT_NAME", "manual"))
     print("job:", json.dumps(job, ensure_ascii=False), flush=True)
     if not job.get("source"):
         print("nothing to do")
@@ -328,6 +328,9 @@ def submit_when_posted(ep, part, title):
             links = http_json(links_url)
         except Exception as e:
             print("links not ready:", e)
+        if links.get("notPosted"):
+            print("n8n posted nothing (no account connected) - nothing to submit")
+            return
         if links.get("tiktokUrl") or links.get("instagramUrl"):
             break
         time.sleep(30)

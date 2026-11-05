@@ -28,6 +28,9 @@ def submit_one(page, link, n):
     dialog_btn = page.get_by_role("dialog").get_by_role("button", name="Submit clip")
     if dialog_btn.count() == 0:
         dialog_btn = page.get_by_role("button", name="Submit clip").last
+    if os.environ.get("CHECK_ONLY") == "1":  # test mode: everything except the final click
+        page.keyboard.press("Escape")
+        return {"link": link, "ok": dialog_btn.count() > 0, "page_message": "check only - not submitted"}
     dialog_btn.click()
     time.sleep(6)
     page.screenshot(path="%s/submit-%d-after.png" % (SHOTS, n))
