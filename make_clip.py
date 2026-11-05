@@ -225,7 +225,7 @@ def main():
         total = float(run(ytdlp() + ["--print", "duration", src], 300).strip().splitlines()[-1])
     else:  # direct link (Google Drive): ffmpeg reads only the bytes it needs
         src = drive_relay(src)
-        total = float(run(["ffprobe", "-v", "error"] + UA + ["-show_entries", "format=duration", "-of", "csv=p=0", src], 300, tries=5).strip())
+        total = float(run(["ffprobe", "-v", "error"] + UA + ["-show_entries", "format=duration", "-of", "csv=p=0", src], 1500, tries=2).strip())
     start = part * seg
     if start >= total - 15:  # under 15 s left (already glued onto the previous part)
         if not DRY:
