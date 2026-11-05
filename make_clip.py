@@ -206,9 +206,10 @@ def build_ass(title, words, video_h, length):
 
 def main():
     if DRY:
-        job = {"ep": 0, "part": 2, "part_seconds": 60,
-               "source": "https://drive.usercontent.google.com/download?id=1xZeg96A4BnfULVC9KRWVPcjOyXJyDfL3&export=download&confirm=t",
-               "title": "المستثمر الإماراتي | مقابلات - الجزء 3",
+        tf = os.environ.get("TEST_FILE") or "1xZeg96A4BnfULVC9KRWVPcjOyXJyDfL3"
+        job = {"ep": 0, "part": int(os.environ.get("TEST_PART") or 2), "part_seconds": 60,
+               "source": "https://drive.usercontent.google.com/download?id=" + tf + "&export=download&confirm=t",
+               "title": "المستثمر الإماراتي | تجربة - الجزء %d" % (int(os.environ.get("TEST_PART") or 2) + 1),
                "watermark_url": "https://drive.usercontent.google.com/download?id=1E36oS56HOOo9f1Xb-aSUdQhCisjLb67v&export=download&confirm=t",
                "captions": True}
     else:

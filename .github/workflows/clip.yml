@@ -10,6 +10,14 @@ on:
         description: "Test only: make Part 1 of episode 1, don't send to n8n"
         type: boolean
         default: false
+      test_file:
+        description: "Test only: Google Drive file id to cut"
+        type: string
+        default: ""
+      test_part:
+        description: "Test only: part number (0 = first minute)"
+        type: string
+        default: "2"
 
 permissions:
   contents: write
@@ -62,6 +70,8 @@ jobs:
           CR_SESSION: ${{ secrets.CR_SESSION }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          TEST_FILE: ${{ inputs.test_file }}
+          TEST_PART: ${{ inputs.test_part }}
         run: python make_clip.py
       - uses: actions/upload-artifact@v4
         if: always()
