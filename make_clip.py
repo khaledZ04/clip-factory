@@ -146,7 +146,9 @@ def ass_time(t):
 
 
 def clean(text):
-    return text.replace("{", "").replace("}", "").replace("\n", " ").strip()
+    text = text.replace("{", "").replace("}", "").replace("\n", " ")
+    # captions read cleaner without punctuation (it also jumps to the wrong side in right-to-left lines)
+    return text.strip(" .,،؛:!?؟…\"'«»-")
 
 
 # colours are &HBBGGRR (ASS order)
