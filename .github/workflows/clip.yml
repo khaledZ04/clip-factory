@@ -31,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      - name: Random delay (0-20 min, so posts look natural)
+        if: github.event_name == 'schedule'
+        run: sleep $((RANDOM % 1200))
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
