@@ -65,6 +65,9 @@ jobs:
       - name: Submit-bot browser
         if: ${{ !inputs.dry_run }}
         run: python -m playwright install chromium-headless-shell > /dev/null
+      - name: TikTok-bot library (uses the Chrome already on the runner)
+        if: ${{ !inputs.dry_run }}
+        run: npm install --no-save --no-audit --no-fund playwright@1.48.2 > /dev/null
       - name: Old clips cleanup (older than 7 days)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,6 +91,7 @@ jobs:
           N8N_READY_URL: ${{ secrets.N8N_READY_URL }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
           CR_SESSION: ${{ secrets.CR_SESSION }}
+          TT_SESSION: ${{ secrets.TT_SESSION }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
           TEST_FILE: ${{ inputs.test_file }}

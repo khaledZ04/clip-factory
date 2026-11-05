@@ -159,6 +159,34 @@ def tiktok_upload(path, title):
         return None
 
 
+def tiktok_web_post(path, job):
+    """Posts on TikTok through TikTok Studio on the web (tiktok-post.js). Returns the video link or None."""
+    cap = os.path.join(WORK, "tiktok-caption.txt")
+    with open(cap, "w", encoding="utf-8") as f:
+        f.write(job.get("tiktok_caption") or job.get("title", ""))
+    handle = job.get("tiktok_handle") or "jancostudios"
+    try:
+        p = subprocess.run(["node", "tiktok-post.js", path, cap, handle], capture_output=True, text=True, timeout=1500)
+    except subprocess.TimeoutExpired:
+        notify("TikTok bot timed out - post this clip by hand", job.get("title", ""))
+        return None
+    out = p.stdout + p.stderr
+    print(out[-2000:], flush=True)
+    for line in out.splitlines():
+        if line.startswith("tiktok_url: "):
+            return line.split(": ", 1)[1].strip()
+    if p.returncode == 2:
+        notify("TikTok sign-in expired - post by hand", "Run save-tiktok-login.js again.\n" + job.get("title", ""))
+    elif p.returncode == 3:
+        notify("TikTok asked for a puzzle - post this clip by hand", job.get("title", ""))
+    elif p.returncode == 4:
+        notify("TikTok: posted, but no link yet - submit by hand", job.get("title", ""), "https://www.tiktok.com/@" + handle)
+        return "POSTED_NO_LINK"
+    else:
+        notify("TikTok bot failed - post this clip by hand", job.get("title", "") + "\n" + out[-300:])
+    return None
+
+
 def ytdlp():
     cmd = ["yt-dlp", "--no-playlist", "--no-warnings"]
     if COOKIES:
@@ -338,7 +366,13 @@ def main():
               "length": length, "source_duration": total, "caption_words": len(words)}
     print("result:", json.dumps(result, ensure_ascii=False), flush=True)
     if not DRY:
-        result["tiktok_publish_id"] = tiktok_upload(out, job.get("title", ""))
+        web = tiktok_web_post(out, job) if os.environ.get("TT_SESSION") else None
+        if web == "POSTED_NO_LINK":
+            result["tiktok_posted"] = True  # it is up on TikTok; don't post this part again
+        elif web:
+            result["tiktok_url"] = web
+        else:
+            result["tiktok_publish_id"] = tiktok_upload(out, job.get("title", ""))  # fallback: draft in the TikTok inbox
         http_json(READY_URL, result)
         submit_when_posted(job["ep"], part, job.get("title", ""))
 
