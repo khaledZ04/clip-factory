@@ -28,7 +28,9 @@ const LOCAL = path.join(__dirname, 'tt-session.json');
   if (!ok) { console.log('Timed out - run it again.'); await browser.close(); process.exit(1); }
   await page.waitForTimeout(5000);
   const state = await ctx.storageState();
-  state.origins = state.origins.filter((o) => o.origin.includes('tiktok'));
+  // GitHub secrets max 48 KB: keep only TikTok cookies (the sign-in), drop the page cache.
+  state.cookies = state.cookies.filter((c) => /tiktok.com$/.test(c.domain));
+  state.origins = [];
   fs.writeFileSync(LOCAL, JSON.stringify(state));
   execFileSync(GH, ['secret', 'set', 'TT_SESSION', '-R', 'khaledZ04/clip-factory'], { input: fs.readFileSync(LOCAL) });
   await browser.close();

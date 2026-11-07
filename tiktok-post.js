@@ -27,6 +27,16 @@ async function checkBlocked(page) {
   if (puzzle) await fail(page, 3, 'CAPTCHA - TikTok asked to verify; post this one by hand');
 }
 
+// TikTok Studio shows "new feature" / "content check" pop-ups that cover the page; close them.
+async function closePopups(page) {
+  for (let i = 0; i < 3; i++) {
+    const btn = page.locator('div[role="dialog"] button, .TUXModal button, [class*="modal" i] button')
+      .filter({ hasText: /^(got it|ok|cancel|not now|close|skip|later|turn on)$/i }).first();
+    if (await btn.count()) { await btn.click({ timeout: 5000 }).catch(() => {}); await sleep(1000); }
+    else { await page.keyboard.press('Escape').catch(() => {}); break; }
+  }
+}
+
 async function videoIds(page) {
   await page.goto(`https://www.tiktok.com/@${handle}`, { waitUntil: 'domcontentloaded', timeout: 90000 });
   await sleep(6000);
@@ -40,6 +50,7 @@ async function videoIds(page) {
     ignoreDefaultArgs: ['--enable-automation'], args: ['--disable-blink-features=AutomationControlled'],
   });
   const ctx = await browser.newContext({ storageState: state, viewport: { width: 1366, height: 900 }, locale: 'en-US' });
+  global.__ctx = ctx;
   const page = await ctx.newPage();
 
   const before = await videoIds(page).catch(() => []);
@@ -56,7 +67,10 @@ async function videoIds(page) {
   const box = page.locator('div[contenteditable="true"]').first();
   await box.waitFor({ timeout: 120000 });
   await sleep(3000);
-  await box.click();
+  await closePopups(page);
+  await page.screenshot({ path: `${SHOTS}/tiktok-uploading.png` });
+  await box.click({ timeout: 10000 }).catch(() => box.click({ force: true }));
+  await box.focus();
   await page.keyboard.press('Control+A');
   await page.keyboard.press('Backspace');
   for (const [i, line] of caption.split('\n').entries()) {
@@ -105,4 +119,8 @@ async function videoIds(page) {
   await browser.close();
   if (!url) { console.log('tiktok: posted, but the new link did not show on the profile yet'); process.exit(4); }
   console.log('tiktok_url: ' + url);
-})().catch((e) => { console.log('tiktok: error - ' + e.message.slice(0, 300)); process.exit(1); });
+})().catch(async (e) => {
+  console.log('tiktok: error - ' + e.message.slice(0, 300));
+  try { for (const p of (global.__ctx ? global.__ctx.pages() : [])) await p.screenshot({ path: `${SHOTS}/tiktok-error.png` }); } catch (x) {}
+  process.exit(1);
+});
