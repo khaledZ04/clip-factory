@@ -10,6 +10,10 @@ on:
         description: "Test only: make Part 1 of episode 1, don't send to n8n"
         type: boolean
         default: false
+      from_timer:
+        description: "Set by the n8n timer (adds the random delay)"
+        type: boolean
+        default: false
       check_submit:
         description: "Test only: open the Content Rewards form and fill it, but do NOT submit"
         type: boolean
@@ -36,7 +40,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Random delay (0-20 min, so posts look natural)
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'schedule' || inputs.from_timer
         run: sleep $((RANDOM % 1200))
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
