@@ -84,7 +84,7 @@ jobs:
         env:
           CR_SESSION: ${{ secrets.CR_SESSION }}
           CHECK_ONLY: "1"
-        run: python submit.py https://www.tiktok.com/@jancostudios/video/7400000000000000000
+        run: python submit.py https://www.tiktok.com/@jancostudios/video/7705575887852342534
       - name: Make clip
         if: ${{ !inputs.check_submit }}
         env:
@@ -106,4 +106,5 @@ jobs:
           path: |
             work/*.mp4
             work/*.png
+            work/*.json
           retention-days: 3

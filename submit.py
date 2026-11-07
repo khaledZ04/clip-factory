@@ -18,7 +18,8 @@ def submit_one(page, link, n):
         page.screenshot(path="%s/submit-%d-nologin.png" % (SHOTS, n))
         raise SystemExit("LOGIN_EXPIRED: no Submit clip button - run save-login.js again")
     page.get_by_role("button", name="Submit clip").first.click()
-    box = page.get_by_placeholder("tiktok.com", exact=False)
+    # the link box was labelled "tiktok.com", now "Paste a link"
+    box = page.locator('input[placeholder*="link" i], input[placeholder*="tiktok" i], textarea[placeholder*="link" i]').first
     box.wait_for(timeout=20000)
     box.fill(link)
     time.sleep(6)  # let the page run its three checks
@@ -29,12 +30,18 @@ def submit_one(page, link, n):
     if dialog_btn.count() == 0:
         dialog_btn = page.get_by_role("button", name="Submit clip").last
     if os.environ.get("CHECK_ONLY") == "1":  # test mode: everything except the final click
+        note = page.get_by_text("can't be used here", exact=False)
+        if note.count():
+            note.first.click()
+            time.sleep(2)
+            page.screenshot(path="%s/submit-%d-accounts.png" % (SHOTS, n))
+            print("accounts note:", page.get_by_role("dialog").last.inner_text()[:600], flush=True)
         page.keyboard.press("Escape")
         return {"link": link, "ok": dialog_btn.count() > 0, "page_message": "check only - not submitted"}
     dialog_btn.click()
     time.sleep(6)
     page.screenshot(path="%s/submit-%d-after.png" % (SHOTS, n))
-    still_open = page.get_by_placeholder("tiktok.com", exact=False).count() > 0
+    still_open = box.count() > 0 and box.is_visible()
     errors = page.get_by_role("alert").all_inner_texts()
     return {"link": link, "ok": not still_open, "page_message": " | ".join(errors)[:300]}
 
