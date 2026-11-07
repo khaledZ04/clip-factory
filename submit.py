@@ -4,7 +4,7 @@ open the page -> "Submit clip" -> paste link -> tick "I've read the requirements
 Uses the sign-in saved by save-login.js (GitHub secret CR_SESSION). Never sees a password.
 Usage: python submit.py <link> [<link> ...]   (env: CR_SESSION, CAMPAIGN_URL)
 """
-import json, os, sys, time
+import json, os, re, sys, time
 from playwright.sync_api import sync_playwright
 
 CAMPAIGN = os.environ.get("CAMPAIGN_URL", "https://contentrewards.com/c/campaigns/e73e9e9c-fba4-4c8b-9c0e-6fb1e607c2a5")
@@ -29,6 +29,10 @@ def submit_one(page, link, n):
     dialog_btn = page.get_by_role("dialog").get_by_role("button", name="Submit clip")
     if dialog_btn.count() == 0:
         dialog_btn = page.get_by_role("button", name="Submit clip").last
+    if dialog_btn.count() and not dialog_btn.is_enabled():  # a check failed (e.g. already submitted, too old)
+        reason = page.get_by_text(re.compile("already submitted|not from|older than|can't|cannot|invalid", re.I)).all_inner_texts()
+        page.keyboard.press("Escape")
+        return {"link": link, "ok": False, "page_message": "Submit is greyed out: " + " | ".join(reason)[:300]}
     if os.environ.get("CHECK_ONLY") == "1":  # test mode: everything except the final click
         note = page.get_by_text("can't be used here", exact=False)
         if note.count():
