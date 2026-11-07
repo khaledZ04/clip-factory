@@ -14,6 +14,7 @@ COOKIES = os.environ.get("YT_COOKIES", "")
 DRY = os.environ.get("DRY_RUN") == "1"
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
 WORK = "work"
+LOGO = "https://raw.githubusercontent.com/khaledZ04/clip-factory/main/tiktok-logo.png"
 os.makedirs(WORK, exist_ok=True)
 
 
@@ -382,7 +383,7 @@ def notify(title, text, click=""):
     if not topic:
         return
     headers = {"Title": title.encode("utf-8").decode("latin-1", "ignore") or "clip", "Priority": "high",
-               "Icon": "https://raw.githubusercontent.com/khaledZ04/clip-factory/main/tiktok-logo.png"}  # TikTok logo next to the alert
+               "Icon": LOGO, "Attach": LOGO, "Filename": "tiktok.png"}  # TikTok logo beside the text (Attach shows it on iPhone)
     if click:
         headers["Click"] = click
     try:
