@@ -381,7 +381,8 @@ def notify(title, text, click=""):
     topic = os.environ.get("NTFY_TOPIC")
     if not topic:
         return
-    headers = {"Title": title.encode("utf-8").decode("latin-1", "ignore") or "clip", "Priority": "high"}
+    headers = {"Title": title.encode("utf-8").decode("latin-1", "ignore") or "clip", "Priority": "high",
+               "Icon": "https://www.google.com/s2/favicons?domain=tiktok.com&sz=128"}  # TikTok logo next to the alert
     if click:
         headers["Click"] = click
     try:
