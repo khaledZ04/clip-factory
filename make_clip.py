@@ -374,8 +374,11 @@ def main():
             result["tiktok_url"] = web
         else:
             result["tiktok_publish_id"] = tiktok_upload(out, job.get("title", ""))  # fallback: draft in the TikTok inbox
+        sent_at = time.time()
         http_json(READY_URL, result)
         submit_when_posted(job["ep"], part, job.get("title", ""))
+        if result.get("tiktok_publish_id"):  # went to the TikTok inbox as a draft: wait for the hand post
+            submit_hand_post(sent_at, job.get("title", ""))
 
 
 def notify(title, text, click=""):
@@ -424,6 +427,46 @@ def submit_when_posted(ep, part, title):
     else:
         notify("Auto-submit failed - submit by hand within 30 min", title + "\n" + "\n".join(urls),
                "https://contentrewards.com/c/campaigns/e73e9e9c-fba4-4c8b-9c0e-6fb1e607c2a5")
+
+
+def run_submit(urls, title):
+    p = subprocess.run([sys.executable, "submit.py"] + urls, capture_output=True, text=True, timeout=900)
+    print(p.stdout[-3000:], p.stderr[-3000:], flush=True)
+    cr = "https://contentrewards.com/c/campaigns/e73e9e9c-fba4-4c8b-9c0e-6fb1e607c2a5"
+    if "LOGIN_EXPIRED" in p.stdout + p.stderr:
+        notify("Content Rewards sign-in expired - submit by hand", "Run save-login.js again.\n" + "\n".join(urls), cr)
+    elif p.returncode == 0:
+        notify("Submitted to Content Rewards", title + "\n" + "\n".join(urls), urls[0])
+    else:
+        notify("Auto-submit failed - submit by hand within 30 min", title + "\n" + "\n".join(urls), cr)
+
+
+def submit_hand_post(sent_at, title, minutes=60):
+    """After a TikTok inbox draft: watch jancostudios' videos (official API, via n8n) for up to an hour.
+    As soon as the hand-posted video shows up, submit its link on Content Rewards."""
+    if not os.environ.get("CR_SESSION"):
+        return
+    videos_url = NEXT_URL.split("?")[0].replace("clip-next-", "tiktok-videos-")
+    known = None
+    for i in range(minutes):
+        try:
+            info = http_json(videos_url)
+        except Exception as e:
+            info = {"videos": [], "reason": str(e)}
+        vids = info.get("videos") or []
+        if not vids and info.get("reason") and i == 0:
+            print("tiktok videos:", info["reason"], flush=True)
+        if known is None:
+            known = {v["id"] for v in vids if v.get("create_time", 0) < sent_at - 120}
+        fresh = [v for v in vids if v["id"] not in known and v.get("create_time", 0) >= sent_at - 120]
+        if fresh:
+            url = sorted(fresh, key=lambda v: v["create_time"])[0]["url"]
+            print("tiktok: hand post found", url, flush=True)
+            run_submit([url], title)
+            return
+        time.sleep(60)
+    print("tiktok: no hand post within %d min" % minutes, flush=True)
+    notify("TikTok draft not posted within 1 hour", title + "\nIf you post it later, submit the link by hand.")
 
 
 if __name__ == "__main__":
